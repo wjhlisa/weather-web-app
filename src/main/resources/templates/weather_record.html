@@ -1,0 +1,389 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 上述3个meta标签*必须*放在最前面，任何其他内容都*必须*跟随其后！ -->
+<title>三毛天气预报后台</title>
+<!--因为这里没有使用到Bootstrap的JS插件，所以就没有引用Jquery组件-->
+<!-- Bootstrap -->
+<link rel="stylesheet"
+	href="https://cdn.bootcss.com/bootstrap/3.3.4/css/bootstrap.min.css">
+	
+<!-- 禁止网站调用favicon.ico请求 
+https://www.jianshu.com/p/e1f6eeac19c4 -->
+<link rel="icon" href="data:;base64,=">
+
+<!-- 将footer固定在页面底部的实现方法 -->
+<!-- https://segmentfault.com/a/1190000004453249 -->
+<style>
+html {
+	height: 100%;
+}
+
+header {
+	font-size: 30px;
+	text-align: center;
+}
+
+body {
+	min-height: 100%;
+	margin: 0;
+	padding: 0;
+	position: relative;
+}
+
+main {
+	padding-bottom: 100px;
+}
+
+footer {
+	position: absolute;
+	bottom: 0;
+	width: 100%;
+	height: 100px;
+}
+</style>
+</head>
+
+<body onLoad="onLoad()">
+
+	
+	<div style='display:block'>
+	<!-- 市选择  -->
+	<label for="shiId" class="col-sm-1 control-label">城市</label>
+	<div class="col-sm-2">
+		<select class="form-control select" id="shiId" name="shiId" onchange="onShiChange()">
+			<option value='0'>所有城市</option>
+			<option th:each='sh : ${shis}' th:value='${sh}' th:text='${sh}'></option>
+		</select>
+	</div>
+	
+	<!-- 辖区选择  -->
+	<label for="quId" class="col-sm-1 control-label">辖区</label>
+	<div class="col-sm-2">
+		<select class="form-control select" id="quId" name="quId" onchange="onQuChange()">
+			<option value='0'>所有辖区</option>			
+		</select>
+	</div>
+	</div>	
+
+
+	<header>天气记录</header>
+	<main id='mainID'></main>
+	<footer id='footerID'></footer>
+
+	<!-- 更多表格样式参考： http://v3.bootcss.com/css/#tables-->
+	<!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+	<script src="https://cdn.bootcss.com/jquery/1.11.2/jquery.min.js"></script>
+	<!-- Include all compiled plugins (below), or include individual files as needed -->
+	<script
+		src="https://cdn.bootcss.com/bootstrap/3.3.4/js/bootstrap.min.js"></script>
+
+	<script>
+		function onLoad() {
+			onUpdate(1);			
+		}
+		
+		//城市选项改变
+		function onShiChange()
+		{	
+			let shiSelect = document.getElementById('shiId');
+			let newShiName = shiSelect.options[shiSelect.selectedIndex].value;
+			
+			let quSelect = document.getElementById('quId');
+			
+			if (newShiName === '0')
+			{	//选择所有城市
+				//只保留所有辖区
+				quSelect.options.length = 1;
+				quSelect.options[0].selected = true;
+				
+				onUpdate(1);
+			}
+			else
+			{	//选择某个城市
+				//从后台获取该城市辖区
+				$.ajax({
+				url : 'https://demo.com/area/' + newShiName,
+	
+				headers : {
+					Accept : "application/json"
+				},
+
+				success : function(data, status) {
+					console.log(data);
+
+					//若没有数据，返回
+					if (data == null || data.length == 0)
+					{
+						return;
+					}
+					
+					//保留第一个选项 - 所有辖区					
+					quSelect.options.length = 1;	
+					quSelect.options[0].selected = true;
+					
+					//填充辖区控件
+					for (let i = 0; i < data.length; i++)
+					{
+						let quOption = document.createElement('OPTION');
+						quOption.value = data[i].areaCode;
+						quOption.text = data[i].qu;
+						quSelect.add(quOption);
+					}	
+					
+					onUpdate(1);
+				},
+
+				error : function(data, status, error) {
+					console.log(data);
+				},
+				});
+			}
+		}
+
+		
+		function onQuChange()
+		{	
+			onUpdate(1);
+		}
+
+		function onUpdate(newPageNum)
+		{
+			let shiSelect = document.getElementById('shiId');
+			let newShiName = shiSelect.options[shiSelect.selectedIndex].value;
+			
+			let quSelect = document.getElementById('quId');
+			let newQuID = quSelect.options[quSelect.selectedIndex].value;
+		
+			$.ajax({				
+				url : 'https://demo.com/wr/' + newShiName + '?qu=' + newQuID + '&page=' + newPageNum,
+
+				headers : {
+					Accept : "application/json"
+				},
+
+				success : function(data, status) {
+					console.log(data);
+
+					//若没有数据，返回
+					if (data == null || data.weatherRecords == null
+							|| data.weatherRecords.content == null
+							|| data.weatherRecords.content.length == 0) {
+						return;
+					}
+					
+					createTableFromJSON(data);
+					
+					createPagination(data.currentPage, data.totalPages);
+				},
+
+				error : function(data, status, error) {
+					console.log(data);
+				},
+			});
+		}
+		
+		
+		const colNames = 
+			{
+				'date': '日期',
+				'shi': '城市',
+				'qu': '辖区',
+				'dayHighTemp': '最高温度',
+				'nightLowTemp': '最低温度',
+				'daySummary': '白天概况',
+				'dayWind': '白天风',
+				'nightSummary': '夜晚概况',
+				'nightWind': '夜晚风',
+				'sunRise': '日出',
+				'sunSet': '日落',
+				'weatherPicName': '图片编号',
+				'ganMao': '感冒',
+				'wuRan': '污染',
+				'xiChe': '洗车',
+				'chuanYi': '穿衣',
+				'yunDong': '运动',
+				'ziWaiXian': '紫外线',
+				'pm25': 'PM2.5',
+				'aqi': 'AQI'
+			}
+		
+
+		//Create a table from JSON
+		// https://www.encodedna.com/javascript/populate-json-data-to-html-table-using-javascript.htm
+		function createTableFromJSON(data) {
+			let contentArray = data.weatherRecords.content;
+
+			//若表已经存在，则删除
+			if ($('#tableID').length > 0) {
+				$('#tableID').remove();
+			}
+
+			//创建表
+			let table = document.createElement('table');
+			table.id = 'tableID';
+			table.setAttribute('class', 'table table-striped table-hover');
+
+			//标题行
+			let tr = table.insertRow(-1);
+			for (let key in colNames)
+			{
+				let th = document.createElement('th');
+				th.innerHTML = colNames[key];
+				tr.appendChild(th);
+			}
+
+			//数据行
+			for (let i = 0; i < contentArray.length; i++) {
+				tr = table.insertRow(-1);
+
+				for (let key in colNames)
+				{
+					let cell = tr.insertCell(-1);
+					cell.innerHTML = contentArray[i][key];
+				}
+			}
+
+			//加入表
+			document.getElementById('mainID').appendChild(table);
+		}
+		
+
+		//加入分页
+		//https://blog.csdn.net/Lynn_coder/article/details/79919638
+		function createPagination(currentPageNum, totalPageNum) {
+			let pContainer = document.getElementById('footerID');
+
+			//若分页已经存在，则删除
+			if ($('#pageID').length > 0) {
+				$('#pageID').remove();
+			}
+
+			let ul = document.createElement('ul');
+			ul.id = 'pageID';
+			pContainer.appendChild(ul);
+			ul.setAttribute('class', 'pagination pagination-lg');
+
+			let li1 = document.createElement('li');
+			ul.appendChild(li1);
+			let a1 = document.createElement('a');
+			a1.innerHTML = '上一页';
+			li1.appendChild(a1);
+			if (currentPageNum == 1) {
+				li1.setAttribute('class', 'disabled');
+				a1.setAttribute('href', '#');
+			} else {
+				a1.addEventListener('click', function() {
+					onUpdate(currentPageNum - 1);
+				});
+				//a1.setAttribute('href', 'wr/101100108?page=' + (currentPageNum - 1));
+			}
+
+			if (currentPageNum - 3 >= 1) {
+				let li = document.createElement('li');
+				ul.appendChild(li);
+
+				let a = document.createElement('a');
+				li.appendChild(a);
+				//a.setAttribute('href', 'wr/101100108?page=' + (currentPageNum - 3));
+				a.addEventListener('click', function() {
+					onUpdate(currentPageNum - 3);
+				});
+				a.innerHTML = currentPageNum - 3;
+			}
+
+			if (currentPageNum - 2 >= 1) {
+				let li = document.createElement('li');
+				ul.appendChild(li);
+
+				let a = document.createElement('a');
+				li.appendChild(a);
+				//a.setAttribute('href', 'wr/101100108?page=' + (currentPageNum - 2));
+				a.addEventListener('click', function() {
+					onUpdate(currentPageNum - 2);
+				});
+				a.innerHTML = currentPageNum - 2;
+			}
+
+			if (currentPageNum - 1 >= 1) {
+				let li = document.createElement('li');
+				ul.appendChild(li);
+
+				let a = document.createElement('a');
+				li.appendChild(a);
+				//a.setAttribute('href', 'wr/101100108?page=' + (currentPageNum - 1));
+				a.addEventListener('click', function() {
+					onUpdate(currentPageNum - 1);
+				});
+				a.innerHTML = currentPageNum - 1;
+			}
+
+			let li5 = document.createElement('li');
+			li5.setAttribute('class', 'active');
+			ul.appendChild(li5);
+			let a5 = document.createElement('a');
+			li5.appendChild(a5);
+			a5.setAttribute('href', '#');
+			a5.innerHTML = currentPageNum;
+
+			if (currentPageNum + 1 <= totalPageNum) {
+				let li = document.createElement('li');
+				ul.appendChild(li);
+
+				let a = document.createElement('a');
+				li.appendChild(a);
+				//a.setAttribute('href', 'wr/101100108?page=' + (currentPageNum + 1));
+				a.addEventListener('click', function() {
+					onUpdate(currentPageNum + 1);
+				});
+				a.innerHTML = currentPageNum + 1;
+			}
+
+			if (currentPageNum + 2 <= totalPageNum) {
+				let li = document.createElement('li');
+				ul.appendChild(li);
+
+				let a = document.createElement('a');
+				li.appendChild(a);
+				//a.setAttribute('href', 'wr/101100108?page=' + (currentPageNum + 2));
+				a.addEventListener('click', function() {
+					onUpdate(currentPageNum + 2);
+				});
+				a.innerHTML = currentPageNum + 2;
+			}
+
+			if (currentPageNum + 3 <= totalPageNum) {
+				let li = document.createElement('li');
+				ul.appendChild(li);
+
+				let a = document.createElement('a');
+				li.appendChild(a);
+				//a.setAttribute('href', 'wr/101100108?page=' + (currentPageNum + 3));
+				a.addEventListener('click', function() {
+					onUpdate(currentPageNum + 3);
+				});
+				a.innerHTML = currentPageNum + 3;
+			}
+
+			let li9 = document.createElement('li');
+			ul.appendChild(li9);
+			let a9 = document.createElement('a');
+			a9.innerHTML = '下一页';
+			li9.appendChild(a9);
+			if (currentPageNum == totalPageNum) {
+				li9.setAttribute('class', 'disabled');
+				//a9.setAttribute('href', '#');
+			} else {
+				//a9.setAttribute('href', 'wr/101100108?page=' + (currentPageNum + 1));
+				a9.addEventListener('click', function() {
+					onUpdate(currentPageNum + 1);
+				});
+			}
+		}
+	</script>
+</body>
+</html>
